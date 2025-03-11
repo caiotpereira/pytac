@@ -1,0 +1,415 @@
+import json
+import logging
+import os
+import pyudev
+import re
+import serial
+import sys
+import usb.core
+from pyftdi.gpio import GpioAsyncController
+from pexpect import fdpexpect
+from time import sleep
+from types import MethodType
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+
+class TACException(Exception):
+    status_code = 420
+    detail = 'Unable to perform requested operation'
+
+#def logComment(comment):
+#    print(comment)
+#
+#
+#def delay(length):
+#    d = float(length/1000)
+#    logComment(f"Sleeping for {d} seconds")
+#    sleep(d)
+
+
+class Board(dict):
+    ID_VENDOR_FTDI = 0x0403
+    ID_PRODUCT_FTDI = 0x6011
+    ID_VENDOR_QCOM = 0x05c6
+    ID_PRODUCT_QCOM = 0x9302
+
+    @classmethod
+    def create_board(cls, serial, tac_config_path):
+        device = usb.core.find(serial_number=serial)
+        if device:
+            if device.idProduct == Board.ID_PRODUCT_FTDI and device.idVendor == Board.ID_VENDOR_FTDI:
+                return FtdiBoard(device, tac_config_path)
+            if device.idProduct == Board.ID_PRODUCT_QCOM and device.idVendor == Board.ID_VENDOR_QCOM:
+                return PsocBoard(device, tac_config_path)
+
+    def __init__(self):
+        self.ports = {}
+        self.pins = {}
+        self.quick_methods = {}
+        self.usb_device = None
+        dict.__init__(self,
+                      ports=self.ports,
+                      pins=self.pins,
+                      quick_methods=self.quick_methods)
+
+    def logComment(self, comment):
+        print(comment)
+
+    def delay(self, length):
+        d = float(length/1000)
+        self.logComment(f"Sleeping for {d} seconds")
+        sleep(d)
+
+    def create_pins(self):
+        raise NotImplementedError()
+
+    def create_ports(self):
+        raise NotImplementedError()
+
+    def parse_script(self):
+        if self.full_config:
+            initial_script = self.full_config["script"]
+            new_script = initial_script
+            # replace variables with actual values
+            variables = self.full_config.get("variables", [])
+            for variable in variables:
+                # create global variables
+                var_name = variable.get("name")
+                if var_name:
+                    var_re = re.compile(rf"\${var_name}")
+                    new_script = var_re.sub(variable["default_value"], new_script)
+
+            # remove commented lines
+            fix_comments = re.compile(r"\/\/.*")
+            new_script = fix_comments.sub("\r", new_script)
+            fix_comments = re.compile(r"\/\/.*\r")
+            new_script = fix_comments.sub("\r", new_script)
+
+            # fix function definitions
+            fix_functions = re.compile(r"\(\)[\s]?", re.MULTILINE)
+            new_script = fix_functions.sub("(self):\n", new_script)
+            fix_functions2 = re.compile(r"\(\)[\s]?\r", re.MULTILINE)
+            new_script = fix_functions2.sub("(self):\r", new_script)
+
+            # add brackets to function calls
+            fix_no_parenthesis = re.compile(r"([A-Za-z0-9]+)\s([0-9]+)\s?", re.MULTILINE)
+            new_script = fix_no_parenthesis.sub(r"self.\1(\2)\n", new_script)
+
+            # fixes syntax of internal function calls
+            fix_no_parenthesis_func = re.compile(r"\t([A-Za-z0-9]+)$", re.MULTILINE)
+            new_script = fix_no_parenthesis_func.sub(r"\tself.\1()", new_script)
+
+            fix_no_parenthesis_empty = re.compile(r"self.([A-Za-z0-9]+)\s?$", re.MULTILINE)
+            new_script = fix_no_parenthesis_empty.sub(r"self.\1()", new_script)
+
+            fix_log_comment = re.compile(r"logComment\s([a-zA-Z0-9=_\ ]+)\s?$", re.MULTILINE)
+            new_script = fix_log_comment.sub(r'self.logComment("\1")', new_script)
+
+            d = {}
+            exec(new_script, d)
+
+            # create ports
+            self.create_ports()
+
+            print(self.ports.keys())
+            # create pins
+            self.create_pins()
+
+            for name in d.keys():
+                if not name.startswith("__"):
+                    logger.debug(f"Adding {name}")
+                    self.quick_methods.update({name: QuickMethod(self, name)})
+                    method = MethodType(d.get(name), self)
+                    setattr(self, name, method)
+
+
+class FtdiBoard(Board):
+    def __init__(self, usb_device, tac_config_path):
+        Board.__init__(self)
+        self.usb_device = usb_device
+        conf = None
+        f = open(os.path.join(tac_config_path, "DeviceList.json"), "r")
+        device_list = json.loads(f.read())
+        f.close()
+        catalog = device_list.get("catalog")
+        conf_dict = next((x for x in catalog if x.get("usb_descriptor") == self.usb_device.product), None)
+        if conf_dict:
+            # extract tac_configs/name.tconf from the list item
+            # example:
+            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
+            conf = conf_dict.get("configPath").split("/", 6)[-1]
+
+        if conf is None:
+            logger.error("No matching FTDI config found")
+            sys.exit(1)
+
+        f = open(conf, "rb")
+        self.full_config = json.loads(f.read())
+        f.close()
+        self.parse_script()
+
+    def create_ports(self):
+        for p in self.full_config.get("bus"):
+            bus_name = p.get("bus")
+            if p.get("bus_function") == 2:
+                self.ports.update({bus_name: FtdiPort(bus_name, self.usb_device.serial_number)})
+
+    def create_pins(self):
+        for p in self.full_config.get("pins"):
+            pin = FtdiPin(self, p)
+            pin.setPort(self.ports.get(pin.bus))
+            logger.debug(f"Adding {pin.command}")
+            self.pins.update({f"{pin.bus}{pin.pin_number}": pin})
+            setattr(self, pin.command, pin.set)
+
+
+class PsocBoard(Board):
+    def __init__(self, usb_device, tac_config_path):
+        Board.__init__(self)
+        self.usb_device = usb_device
+        conf = None
+        f = open(os.path.join(tac_config_path, "DeviceList.json"), "r")
+        device_list = json.loads(f.read())
+        f.close()
+        catalog = device_list.get("catalog")
+        self.board_id = self.__get_board_id()
+        conf_dict = next((x for x in catalog if x.get("platform_id") == self.board_id), None)
+        if conf_dict:
+            # extract tac_configs/name.tconf from the list item
+            # example:
+            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
+            conf = conf_dict.get("configPath").split("/", 6)[-1]
+
+        if conf is None:
+            logger.error("No matching PSOC config found")
+            sys.exit(1)
+
+        f = open(conf, "rb")
+        self.full_config = json.loads(f.read())
+        f.close()
+        self.parse_script()
+
+    def __get_board_id(self):
+        # connect to serial and call "getboardid"
+        serial_port = None
+        context = pyudev.Context()
+        for d in context.list_devices(ID_SERIAL_SHORT=self.usb_device.serial_number):
+            for l in d.device_links:
+                serial_port = l
+                break
+
+        logger.info(f"Opening {serial_port}")
+        expect_connection = None
+
+        connection = serial.Serial()
+        connection.baudrate = 115200
+        connection.port = serial_port
+        try:
+            connection.open()
+        except serial.SerialException:
+            logger.error("Serial Exception")
+            sys.exit(1)
+        expect_connection = fdpexpect.fdspawn(connection)
+        if not expect_connection.isalive():
+            logger.error("Expect connection not created")
+            sys.exit(1)
+
+        expect_connection.send('\r')
+        expect_connection.expect('CMD')
+        expect_connection.send("getboardid\r")
+        expect_connection.expect('ok')
+        ret_value = expect_connection.before
+        expect_connection.close()
+        # find returned value
+        r = re.search(r"\d+", ret_value.decode())
+        if r:
+            return int(r.group(0))
+        return None
+
+
+    def create_ports(self):
+        self.ports.update({0: PsocPort(self.usb_device.serial_number)})
+
+    def create_pins(self):
+        for config in self.full_config.get("pins"):
+            pin = PsocPin(self, config)
+            pin.setPort(self.ports.get(0))
+            logger.debug(f"Adding {pin.command}")
+            self.pins.update({f"{pin.pin_number}": pin})
+            setattr(self, pin.command, pin.set)
+
+
+class QuickMethod(dict):
+    def __init__(self, board, name):
+        self.name = name
+        self.board = board
+        dict.__init__(self, name=self.name, board=self.board.usb_device.serial_number)
+
+    def call(self):
+        try:
+            print(dir(self.board))
+            getattr(self.board, self.name)()
+        except Exception as e:
+            print(e)
+            raise TACException
+        return {}
+
+
+class Pin(dict):
+    def __init__(self, board, config):
+        self.board = board
+        self.bus = config.get("bus")
+        self.command = config.get("command")
+        self.initial_value = config.get("initial_value")
+        self.value = self.initial_value
+        self.input = config.get("input")
+        self.inverted = config.get("inverted")
+        self.pin_number = int(config.get("pin_number"))
+        self.help_hint = config.get("help_hint")
+        self.port = None
+        dict.__init__(self,
+                      bus=self.bus,
+                      command=self.command,
+                      initial_value=self.initial_value,
+                      value=self.value,
+                      input=self.input,
+                      inverted=self.inverted,
+                      pin_number=self.pin_number,
+                      help_hint=self.help_hint,
+                      port=self.port)
+
+    def set(self, value):
+        self.value = value
+        super().__setitem__("value", self.value)
+
+    def initialize(self):
+        raise NotImplementedError()
+
+    def setPort(self, port):
+        self.port = port
+        super().__setitem__("port", self.port)
+
+
+class FtdiPin(Pin):
+    def __init__(self, board, config):
+        Pin.__init__(self, board, config)
+        self.pin_number_mask = 1 << self.pin_number
+
+    def set(self, value):
+        super().set(value)
+        if not self.port:
+            logger.warning(f"No port set for pin {self.bus}{self.pin_number}")
+            return
+        logger.debug(f"Port {self.bus} status: 0x{self.port.status:02X}")
+        logger.debug(f"Setting {self.bus}{self.pin_number} to {value}")
+        logger.debug(f"Mask: 0x{self.pin_number_mask:02X}")
+        if self.value:
+            self.port.write(self.port.status | self.pin_number_mask)
+        else:
+            self.port.write(self.port.status & ~self.pin_number_mask)
+
+    def initialize(self):
+        self.set(int(self.initial_value))
+
+    def setPort(self, port):
+        super().setPort(port)
+        self.initialize()
+
+class PsocPin(Pin):
+    def __init__(self, board, config):
+        Pin.__init__(self, board, config)
+
+    def set(self, value):
+        super().set(value)
+        if not self.port:
+            logger.warning(f"No port set for pin {self.pin_number}")
+            return
+        logger.debug(f"Setting {self.pin_number} to {value}")
+        if self.value:
+            self.port.write(value, self.pin_number)
+
+    def initialize(self):
+        self.set(int(self.initial_value))
+
+    def setPort(self, port):
+        super().setPort(port)
+        self.initialize()
+
+
+class Port(dict):
+    def __init__(self, bus, serial):
+        self.serial = serial
+        self.bus = bus
+        dict.__init__(self, serial=self.serial, bus=self.bus)
+
+    def write(self, value, pin=None):
+        raise NotImplementedError()
+
+    def close(self):
+        raise NotImplementedError()
+
+
+class PsocPort(Port):
+    def __init__(self, serialid):
+        Port.__init__(self, None, serialid)
+        self.serial_port = None
+        context = pyudev.Context()
+        for d in context.list_devices(ID_SERIAL_SHORT=serialid):
+            for l in d.device_links:
+                self.serial_port = l
+                break
+
+        self.expect_connection = None
+
+        self.connection = serial.Serial()
+        self.connection.baudrate = 115200
+        self.connection.port = self.serial_port
+        try:
+            self.connection.open()
+        except serial.SerialException:
+            print("Serial Exception")
+            sys.exit(1)
+        self.expect_connection = fdpexpect.fdspawn(self.connection)
+        if not self.expect_connection.isalive():
+            print("Expect connection not created")
+            sys.exit(1)
+
+    def close(self):
+        if self.connection and self.connection.is_open:
+            self.connection.close()
+
+    def write(self, value, pin):
+        if self.expect_connection and self.expect_connection.isalive():
+            self.expect_connection.send('\r')
+            self.expect_connection.expect('CMD')
+            message = f"pin {value} {pin}\r"
+
+            self.expect_connection.send(message)
+            self.expect_connection.expect('ok')
+        else:
+            print("No expect connection")
+            sys.exit(1)
+
+
+class FtdiPort(Port):
+    def __init__(self, bus, serial, direction=0xff):
+        Port.__init__(self, bus, serial)
+        self.direction = direction
+        self.port = ord(self.bus) - ord("A") + 1
+        self.url = f"ftdi://::{self.serial}/{self.port}"
+        self.pins = {}
+        self.status = 0x0
+        self.gpio = GpioAsyncController()
+        self.gpio.configure(self.url, direction=self.direction)
+
+    def write(self, value, pin=None):
+        self.status = value
+        logger.debug(f"Port {self.bus} value: 0x{self.status:02X}")
+        self.gpio.write(self.status)
+
+    def close(self):
+        logger.debug(f"Closing port {self.bus}")
+        self.gpio.close()
+

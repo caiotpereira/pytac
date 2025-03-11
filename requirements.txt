@@ -1,0 +1,8 @@
+Flask
+Flask-RESTful
+pyftdi
+pyusb
+pexpect
+pyserial
+pyudev
+requests
