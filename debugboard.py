@@ -85,14 +85,14 @@ class Board(dict):
             new_script = fix_functions2.sub("(self):\r", new_script)
 
             # add brackets to function calls
-            fix_no_parenthesis = re.compile(r"([A-Za-z0-9]+)\s([0-9]+)\s?", re.MULTILINE)
+            fix_no_parenthesis = re.compile(r"([A-Za-z0-9_]+)\s([0-9]+)\s?", re.MULTILINE)
             new_script = fix_no_parenthesis.sub(r"self.\1(\2)\n", new_script)
 
             # fixes syntax of internal function calls
-            fix_no_parenthesis_func = re.compile(r"\t([A-Za-z0-9]+)$", re.MULTILINE)
+            fix_no_parenthesis_func = re.compile(r"\t([A-Za-z0-9_]+)$", re.MULTILINE)
             new_script = fix_no_parenthesis_func.sub(r"\tself.\1()", new_script)
 
-            fix_no_parenthesis_empty = re.compile(r"self.([A-Za-z0-9]+)\s?$", re.MULTILINE)
+            fix_no_parenthesis_empty = re.compile(r"self.([A-Za-z0-9_]+)\s?$", re.MULTILINE)
             new_script = fix_no_parenthesis_empty.sub(r"self.\1()", new_script)
 
             fix_log_comment = re.compile(r"logComment\s([a-zA-Z0-9=_\ ]+)\s?$", re.MULTILINE)
