@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from debugboard import Board
 from flask import Flask
 from flask_restful import Resource, Api, reqparse
+from werkzeug.exceptions import BadRequest
 from werkzeug.serving import run_simple
 
 app = Flask(__name__)
@@ -53,6 +54,37 @@ class QuickMethodList(Resource):
         return {}
 
 
+class CommandView(Resource):
+    def get(self, boardid, name):
+        b = boards.get(boardid, {})
+        if b:
+            return b.commands.get(name, {})
+        return {}
+
+    def put(self, boardid, name):
+        args = rparser.parse_args()
+        value = args.get("value")
+        if value is None:
+            raise BadRequest("insufficient parameters")
+        b = boards.get(boardid, {})
+        if b:
+            try:
+                c = getattr(b, name)
+                if c:
+                    c(value)
+            except:
+                raise TACException
+        return b.pins
+
+
+class CommandList(Resource):
+    def get(self, boardid):
+        b = boards.get(boardid, {})
+        if b:
+            return b.commands
+        return {}
+
+
 class PinView(Resource):
 
     def get(self, boardid, pinid):
@@ -65,7 +97,7 @@ class PinView(Resource):
         args = rparser.parse_args()
         value = args.get("value")
         if value is None:
-            raise HTTPException("insufficient parameters")
+            raise BadRequest("insufficient parameters")
         b = boards.get(boardid, {})
         if b:
             p = b.pins.get(pinid)
@@ -105,6 +137,8 @@ api.add_resource(QuickMethodView, "/<boardid>/quick/<name>")
 api.add_resource(QuickMethodList, "/<boardid>/quick")
 api.add_resource(PortView, "/<boardid>/port/<portid>")
 api.add_resource(PortList, "/<boardid>/port")
+api.add_resource(CommandView, "/<boardid>/command/<name>")
+api.add_resource(CommandList, "/<boardid>/command")
 
 
 if __name__ == '__main__':

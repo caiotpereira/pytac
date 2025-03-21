@@ -37,6 +37,7 @@ class Board(dict):
     def __init__(self):
         self.ports = {}
         self.pins = {}
+        self.commands = {}
         self.quick_methods = {}
         self.usb_device = None
         dict.__init__(self,
@@ -151,6 +152,7 @@ class FtdiBoard(Board):
             pin.setPort(self.ports.get(pin.bus))
             logger.debug(f"Adding {pin.command}")
             self.pins.update({f"{pin.bus}{pin.pin_number}": pin})
+            self.commands.update({f"{pin.command}": f"{pin.command}"})
             setattr(self, pin.command, pin.set)
 
 
@@ -258,6 +260,7 @@ class PsocBoard(Board):
             pin.setPort(self.ports.get(0))
             logger.debug(f"Adding {pin.command}")
             self.pins.update({f"{pin.pin_number}": pin})
+            self.commands.update({f"{pin.command}": f"{pin.command}"})
             setattr(self, pin.command, pin.set)
 
 
