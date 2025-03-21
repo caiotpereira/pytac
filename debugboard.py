@@ -344,13 +344,19 @@ class PsocPin(Pin):
         Pin.__init__(self, board, config)
 
     def set(self, value):
-        super().set(value)
+        lcl_value = None
+        try:
+            lcl_value = int(value)
+        except ValueError:
+            logger.error("Value has to be int")
+            logger.error(f"Received {value}")
+            return
+        super().set(lcl_value)
         if not self.port:
             logger.warning(f"No port set for pin {self.pin_number}")
             return
-        logger.debug(f"Setting {self.pin_number} to {value}")
-        if self.value:
-            self.port.write(value, self.pin_number)
+        logger.debug(f"Setting {self.pin_number} to {lcl_value}")
+        self.port.write(lcl_value, self.pin_number)
 
     def initialize(self):
         self.set(int(self.initial_value))
