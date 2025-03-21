@@ -181,6 +181,36 @@ class PsocBoard(Board):
         self.full_config = json.loads(f.read())
         f.close()
         self.parse_script()
+        self.quick_methods.update({"devicePowerOn": QuickMethod(self, "devicePowerOn")})
+        self.quick_methods.update({"devicePowerOff": QuickMethod(self, "devicePowerOff")})
+        self.quick_methods.update({"usbDevicePowerOn": QuickMethod(self, "usbDevicePowerOn")})
+        self.quick_methods.update({"usbDevicePowerOff": QuickMethod(self, "usbDevicePowerOff")})
+
+    def devicePower(self, value):
+        logger.debug(f"Calling devicePower {value}")
+        if value:
+            self.ports[0].call_method("devicePower", "on")
+        else:
+            self.ports[0].call_method("devicePower", "off")
+
+    def usbDevicePower(self, value):
+        logger.debug(f"Calling usbDevicePower {value}")
+        if value:
+            self.ports[0].call_method("usbDevicePower", "on")
+        else:
+            self.ports[0].call_method("usbDevicePower", "off")
+
+    def devicePowerOn(self):
+        self.devicePower(True)
+
+    def devicePowerOff(self):
+        self.devicePower(False)
+
+    def usbDevicePowerOn(self):
+        self.usbDevicePower(True)
+
+    def usbDevicePowerOff(self):
+        self.usbDevicePower(False)
 
     def __get_board_id(self):
         # connect to serial and call "getboardid"
@@ -370,6 +400,19 @@ class PsocPort(Port):
     def close(self):
         if self.connection and self.connection.is_open:
             self.connection.close()
+
+    def call_method(self, method, value):
+        logger.debug(f"Calling {method} {value}")
+        if self.expect_connection and self.expect_connection.isalive():
+            self.expect_connection.send('\r')
+            self.expect_connection.expect('CMD')
+            message = f"{method} {value}\r"
+
+            self.expect_connection.send(message)
+            self.expect_connection.expect('ok')
+        else:
+            logger.error("No expect connection")
+            sys.exit(1)
 
     def write(self, value, pin):
         if self.expect_connection and self.expect_connection.isalive():
