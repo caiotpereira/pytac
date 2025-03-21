@@ -12,7 +12,6 @@ from time import sleep
 from types import MethodType
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
 
 
 class TACException(Exception):
@@ -104,7 +103,6 @@ class Board(dict):
             # create ports
             self.create_ports()
 
-            print(self.ports.keys())
             # create pins
             self.create_pins()
 
@@ -229,8 +227,9 @@ class PsocBoard(Board):
         connection.port = serial_port
         try:
             connection.open()
-        except serial.SerialException:
+        except serial.SerialException as e:
             logger.error("Serial Exception")
+            logger.error(e)
             sys.exit(1)
         expect_connection = fdpexpect.fdspawn(connection)
         if not expect_connection.isalive():
@@ -270,10 +269,9 @@ class QuickMethod(dict):
 
     def call(self):
         try:
-            print(dir(self.board))
             getattr(self.board, self.name)()
         except Exception as e:
-            print(e)
+            logger.error(e)
             raise TACException
         return {}
 
@@ -389,12 +387,13 @@ class PsocPort(Port):
         self.connection.port = self.serial_port
         try:
             self.connection.open()
-        except serial.SerialException:
-            print("Serial Exception")
+        except serial.SerialException as e:
+            logger.error("Serial Exception")
+            logger.error(e)
             sys.exit(1)
         self.expect_connection = fdpexpect.fdspawn(self.connection)
         if not self.expect_connection.isalive():
-            print("Expect connection not created")
+            logger.error("Expect connection not created")
             sys.exit(1)
 
     def close(self):
@@ -423,7 +422,7 @@ class PsocPort(Port):
             self.expect_connection.send(message)
             self.expect_connection.expect('ok')
         else:
-            print("No expect connection")
+            logger.error("No expect connection")
             sys.exit(1)
 
 

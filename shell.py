@@ -1,4 +1,5 @@
 import logging
+import sys
 from argparse import ArgumentParser
 from debugboard import Board
 from cmd import Cmd
@@ -37,11 +38,17 @@ if __name__ == '__main__':
     parser.add_argument("--tac-config-path",
                         help="Path to directory with TAC configs",
                         default="./tac_configs")
+    parser.add_argument("--log-level", help="Log level", default="DEBUG")
 
     args = parser.parse_args()
+
+    logger.setLevel(args.log_level)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(args.log_level)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
     board = Board.create_board(args.serial, args.tac_config_path)
-    print(board.battery)
-    print(dir(board))
     for pin in board.pins.values():
         method_name = f"do_{pin.command}"
         help_name =  f"help_{pin.command}"
