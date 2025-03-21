@@ -19,15 +19,6 @@ class TACException(Exception):
     status_code = 420
     detail = 'Unable to perform requested operation'
 
-#def logComment(comment):
-#    print(comment)
-#
-#
-#def delay(length):
-#    d = float(length/1000)
-#    logComment(f"Sleeping for {d} seconds")
-#    sleep(d)
-
 
 class Board(dict):
     ID_VENDOR_FTDI = 0x0403
