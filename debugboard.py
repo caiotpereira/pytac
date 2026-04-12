@@ -126,10 +126,7 @@ class FtdiBoard(Board):
         catalog = device_list.get("catalog")
         conf_dict = next((x for x in catalog if x.get("usb_descriptor") == self.usb_device.product), None)
         if conf_dict:
-            # extract tac_configs/name.tconf from the list item
-            # example:
-            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
-            conf = conf_dict.get("configPath").split("/", 6)[-1]
+            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
 
         if conf is None:
             logger.error("No matching FTDI config found")
@@ -168,10 +165,7 @@ class PsocBoard(Board):
         self.board_id = self.__get_board_id()
         conf_dict = next((x for x in catalog if x.get("platform_id") == self.board_id), None)
         if conf_dict:
-            # extract tac_configs/name.tconf from the list item
-            # example:
-            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
-            conf = conf_dict.get("configPath").split("/", 6)[-1]
+            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
 
         if conf is None:
             logger.error("No matching PSOC config found")
