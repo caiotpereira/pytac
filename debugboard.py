@@ -145,6 +145,8 @@ class FtdiBoard(Board):
 
     def create_pins(self):
         for p in self.full_config.get("pins"):
+            if not p.get("enabled", True):
+                continue
             pin = FtdiPin(self, p)
             pin.setPort(self.ports.get(pin.bus))
             logger.debug(f"Adding {pin.command}")
@@ -250,6 +252,8 @@ class PsocBoard(Board):
 
     def create_pins(self):
         for config in self.full_config.get("pins"):
+            if not config.get("enabled", True):
+                continue
             pin = PsocPin(self, config)
             pin.setPort(self.ports.get(0))
             logger.debug(f"Adding {pin.command}")
