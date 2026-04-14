@@ -120,16 +120,13 @@ class FtdiBoard(Board):
         Board.__init__(self)
         self.usb_device = usb_device
         conf = None
-        f = open(os.path.join(tac_config_path, "DeviceList.json"), "r")
+        f = open(os.path.join(tac_config_path, "devicelist.json"), "r")
         device_list = json.loads(f.read())
         f.close()
         catalog = device_list.get("catalog")
         conf_dict = next((x for x in catalog if x.get("usb_descriptor") == self.usb_device.product), None)
         if conf_dict:
-            # extract tac_configs/name.tconf from the list item
-            # example:
-            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
-            conf = conf_dict.get("configPath").split("/", 6)[-1]
+            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
 
         if conf is None:
             logger.error("No matching FTDI config found")
@@ -148,6 +145,8 @@ class FtdiBoard(Board):
 
     def create_pins(self):
         for p in self.full_config.get("pins"):
+            if not p.get("enabled", True):
+                continue
             pin = FtdiPin(self, p)
             pin.setPort(self.ports.get(pin.bus))
             logger.debug(f"Adding {pin.command}")
@@ -161,17 +160,14 @@ class PsocBoard(Board):
         Board.__init__(self)
         self.usb_device = usb_device
         conf = None
-        f = open(os.path.join(tac_config_path, "DeviceList.json"), "r")
+        f = open(os.path.join(tac_config_path, "devicelist.json"), "r")
         device_list = json.loads(f.read())
         f.close()
         catalog = device_list.get("catalog")
         self.board_id = self.__get_board_id()
         conf_dict = next((x for x in catalog if x.get("platform_id") == self.board_id), None)
         if conf_dict:
-            # extract tac_configs/name.tconf from the list item
-            # example:
-            # /var/lib/qcom/data/Alpaca/tac_configs/TAC_PSOC_7.tcnf
-            conf = conf_dict.get("configPath").split("/", 6)[-1]
+            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
 
         if conf is None:
             logger.error("No matching PSOC config found")
@@ -256,6 +252,8 @@ class PsocBoard(Board):
 
     def create_pins(self):
         for config in self.full_config.get("pins"):
+            if not config.get("enabled", True):
+                continue
             pin = PsocPin(self, config)
             pin.setPort(self.ports.get(0))
             logger.debug(f"Adding {pin.command}")
