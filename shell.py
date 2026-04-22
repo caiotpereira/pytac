@@ -34,7 +34,9 @@ class AlpacaCmd(Cmd):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--serial", help="Debug board serial number", required=True)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--serial", help="Debug board serial number")
+    group.add_argument("--config-file-path", help="Path to config file. Only use for debugging the config file syntax")
     parser.add_argument("--tac-config-path",
                         help="Path to directory with TAC configs",
                         default="./tac_configs")
@@ -48,7 +50,11 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    board = Board.create_board(args.serial, args.tac_config_path)
+    board = None
+    if args.serial:
+        board = Board.create_board(args.serial, args.tac_config_path)
+    if args.config_file_path:
+        board = Board.create_from_config(args.config_file_path)
     for pin in board.pins.values():
         method_name = f"do_{pin.command}"
         help_name =  f"help_{pin.command}"

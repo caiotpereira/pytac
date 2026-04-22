@@ -35,6 +35,10 @@ class Board(dict):
     ID_PRODUCT_QCOM = 0x9302
 
     @classmethod
+    def create_from_config(cls, config_file_path):
+        return DummyBoard(config_file_path)
+
+    @classmethod
     def create_board(cls, serial, tac_config_path):
         device = usb.core.find(serial_number=serial)
         if device:
@@ -124,6 +128,40 @@ class Board(dict):
                     self.quick_methods.update({name: QuickMethod(self, name)})
                     method = MethodType(d.get(name), self)
                     setattr(self, name, method)
+
+
+
+
+class DummyBoard(Board):
+    def __init__(self, config_path):
+        Board.__init__(self)
+        self.config_path = config_path
+        self.usb_device = lambda: None
+        self.usb_device.serial_number = "123456"
+        with open(self.config_path) as cf:
+            self.full_config = json.loads(cf.read())
+        self.parse_script()
+
+    def create_ports(self):
+        logger.debug("creating ports")
+        if "FTDI" in self.config_path:
+            for p in self.full_config.get("bus"):
+                bus_name = p.get("bus")
+                if p.get("bus_function") == 2:
+                    self.ports.update({bus_name: DummyPort(bus_name, "123456")})
+
+        if "PSOC" in self.config_path:
+            self.ports.update({0: DummyPort("123456")})
+
+    def create_pins(self):
+        logger.debug("creating pins")
+        for config in self.full_config.get("pins"):
+            pin = DummyPin(self, config)
+            pin.setPort(self.ports.get(0))
+            logger.debug(f"Adding {pin.command}")
+            self.pins.update({f"{pin.pin_number}": pin})
+            self.commands.update({f"{pin.command}": f"{pin.command}"})
+            setattr(self, pin.command, pin.set)
 
 
 class UnoQBoard(Board):
@@ -362,6 +400,11 @@ class Pin(dict):
         super().__setitem__("port", self.port)
 
 
+class DummyPin(Pin):
+    def initialize(self):
+        logger.info(f"Initializing pin: {self.bus} {self.pin_number}")
+
+
 class FtdiPin(Pin):
     def __init__(self, board, config):
         Pin.__init__(self, board, config)
@@ -425,6 +468,13 @@ class Port(dict):
 
     def close(self):
         raise NotImplementedError()
+
+class DummyPort(Port):
+    def write(self, value, pin=None):
+        logger.info(f"Writing to port {self.bus} {self.serial}")
+
+    def close(self):
+        logger.info(f"Closing port {self.bus}")
 
 
 class PsocPort(Port):
