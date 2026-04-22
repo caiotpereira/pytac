@@ -207,7 +207,7 @@ class FtdiBoard(Board):
     def __init__(self, usb_device, tac_config_path):
         Board.__init__(self)
         self.usb_device = usb_device
-        conf = None
+        conf = os.path.join(tac_config_path, "TAC_FTDI_13.tcnf")  # default config for FTDI Alpaca-lite
         f = open(os.path.join(tac_config_path, "devicelist.json"), "r")
         device_list = json.loads(f.read())
         f.close()
