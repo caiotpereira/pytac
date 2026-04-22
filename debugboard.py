@@ -5,13 +5,21 @@ import pyudev
 import re
 import serial
 import sys
-import usb.core
+import usb
 from pyftdi.gpio import GpioAsyncController
 from pexpect import fdpexpect
 from time import sleep
 from types import MethodType
 
 logger = logging.getLogger()
+
+# wait time for other GPIOs to be truly set before touching the reset GPIO
+PRE_RESET_DELAY = 0.1
+
+BITMODE_CBUS = 0x20
+
+# USB ctrl transfer request for FT230X CBUS
+SIO_SET_BITMODE_REQUEST = 0x0b
 
 
 class TACException(Exception):
@@ -22,6 +30,7 @@ class TACException(Exception):
 class Board(dict):
     ID_VENDOR_FTDI = 0x0403
     ID_PRODUCT_FTDI = 0x6011
+    ID_PRODUCT_UNO_Q = 0x6015
     ID_VENDOR_QCOM = 0x05c6
     ID_PRODUCT_QCOM = 0x9302
 
@@ -29,6 +38,8 @@ class Board(dict):
     def create_board(cls, serial, tac_config_path):
         device = usb.core.find(serial_number=serial)
         if device:
+            if device.idVendor == Board.ID_VENDOR_FTDI and device.idProduct == Board.ID_PRODUCT_UNO_Q:
+                return UnoQBoard(device)
             if device.idProduct == Board.ID_PRODUCT_FTDI and device.idVendor == Board.ID_VENDOR_FTDI:
                 return FtdiBoard(device, tac_config_path)
             if device.idProduct == Board.ID_PRODUCT_QCOM and device.idVendor == Board.ID_VENDOR_QCOM:
@@ -113,6 +124,45 @@ class Board(dict):
                     self.quick_methods.update({name: QuickMethod(self, name)})
                     method = MethodType(d.get(name), self)
                     setattr(self, name, method)
+
+
+class UnoQBoard(Board):
+    def __init__(self, usb_device):
+        Board.__init__(self)
+        self.usb_device = usb_device
+        self.quick_methods.update({"powerOn": QuickMethod(self, "normalBoot")})
+        self.quick_methods.update({"bootToEDL": QuickMethod(self, "usbBoot")})
+        self.quick_methods.update({"powerOff": QuickMethod(self, "powerOff")})
+        self.quick_methods.update({"reset": QuickMethod(self, "reset")})
+    def _ftdi_set_bitmode(self, bitmask):
+        bmRequestType = usb.util.build_request_type(usb.util.CTRL_OUT,
+                                                    usb.util.CTRL_TYPE_VENDOR,
+                                                    usb.util.CTRL_RECIPIENT_DEVICE)
+
+        wValue = bitmask | (BITMODE_CBUS << 8)
+        self.usb_device.ctrl_transfer(bmRequestType, SIO_SET_BITMODE_REQUEST, wValue)
+
+    def normalBoot(self):
+        logger.debug("Power cycle to normal boot mode")
+        self._ftdi_set_bitmode(0b01110100)
+        sleep(PRE_RESET_DELAY)
+        self._ftdi_set_bitmode(0b01110000)
+
+    def usbBoot(self):
+        logger.debug("Power cycle to USB boot mode")
+        self._ftdi_set_bitmode(0b01110100)
+        sleep(PRE_RESET_DELAY)
+        self._ftdi_set_bitmode(0b01110001)
+
+    def reset(self):
+        logger.debug("MPU reset pulse")
+        self._ftdi_set_bitmode(0b01110010)
+        sleep(PRE_RESET_DELAY)
+        self._ftdi_set_bitmode(0b01010000)
+
+    def powerOff(self):
+        logger.debug("MPU poweroff")
+        self._ftdi_set_bitmode(0b01110100)
 
 
 class FtdiBoard(Board):
