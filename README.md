@@ -112,3 +112,7 @@ The REST API runs on `http://localhost:5000`. Example usage with curl:
     curl -X PUT "http://localhost:5000/<boardid>/pin/A0?value=1"
 
 Note: REST API server runs in debug mode. Running with multiple concurrent threads may lead to unexpected behaviour.
+
+# License
+
+pytac is licensed under the [BSD-3-clause License](https://spdx.org/licenses/BSD-3-Clause.html). See [LICENSE](LICENSE) for the full license text.
