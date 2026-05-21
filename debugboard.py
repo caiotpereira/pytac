@@ -49,12 +49,16 @@ class Board(dict):
         device = usb.core.find(serial_number=serial)
         if device:
             if device.idVendor == Board.ID_VENDOR_FTDI and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V1:
+                logger.debug("Found Bughopper V1")
                 return BughopperV1Board(device)
             if device.idProduct == Board.ID_PRODUCT_FTDI and device.idVendor == Board.ID_VENDOR_FTDI:
+                logger.debug("Found FTDI Board")
                 return FtdiBoard(device, tac_config_path)
             if device.idProduct == Board.ID_PRODUCT_QCOM and device.idVendor == Board.ID_VENDOR_QCOM:
+                logger.debug("Found Psoc Board")
                 return PsocBoard(device, tac_config_path)
             if device.idVendor == Board.ID_VENDOR_BUGHOPPER_V2 and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V2:
+                logger.debug("Found Bughopper V2")
                 return BughopperV2Board(device)
 
     def __init__(self):
