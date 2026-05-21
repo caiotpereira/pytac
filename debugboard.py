@@ -9,6 +9,7 @@ import re
 import serial
 import sys
 import usb
+import hid
 from pyftdi.gpio import GpioAsyncController
 from pexpect import fdpexpect
 from time import sleep
@@ -36,6 +37,8 @@ class Board(dict):
     ID_VENDOR_QCOM = 0x05c6
     ID_PRODUCT_QCOM = 0x9302
     ID_PRODUCT_BUGHOPPER_V1 = 0x6015
+    ID_VENDOR_BUGHOPPER_V2 = 0x2341
+    ID_PRODUCT_BUGHOPPER_V2 = 0xb001
 
     @classmethod
     def create_from_config(cls, config_file_path):
@@ -51,6 +54,8 @@ class Board(dict):
                 return FtdiBoard(device, tac_config_path)
             if device.idProduct == Board.ID_PRODUCT_QCOM and device.idVendor == Board.ID_VENDOR_QCOM:
                 return PsocBoard(device, tac_config_path)
+            if device.idVendor == Board.ID_VENDOR_BUGHOPPER_V2 and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V2:
+                return BughopperV2Board(device)
 
     def __init__(self):
         self.ports = {}
@@ -219,6 +224,54 @@ class BughopperV1Board(Board):
         self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.VOL_DOWN_MASK | self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT)
         sleep(PRE_RESET_DELAY)
         self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK | self.VOL_DOWN_BIT)
+
+class BughopperV2Board(Board):
+    def __init__(self, usb_device):
+        Board.__init__(self)
+        self.usb_device = hid.Device(usb_device.idVendor, usb_device.idProduct)
+        self.usb_device.serial_number = self.usb_device.serial
+        self.quick_methods.update({"powerOn": QuickMethod(self, "powerOn")})
+        self.quick_methods.update({"bootToEDL": QuickMethod(self, "bootToEDL")})
+        self.quick_methods.update({"powerOff": QuickMethod(self, "powerOff")})
+        self.quick_methods.update({"reset": QuickMethod(self, "reset")})
+        self.quick_methods.update({"forceUsbcHostMode": QuickMethod(self, "forceUsbcHostMode")})
+
+        self.CMD_GPIO = 0x1
+
+        self.EDL_BIT = 0x1
+        self.POWER_DISABLE_BIT = 0x4
+        self.VOL_DOWN_BIT = 0x8
+
+    def _hid_set_bitmode(self, command, gpio_value, mask=0xF):
+        self.usb_device.write(bytes([command, gpio_value, mask]))
+
+    def powerOn(self):
+        logger.debug("Power cycle to normal boot mode")
+        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        sleep(PRE_RESET_DELAY)
+        self._hid_set_bitmode(self.CMD_GPIO, 0x0, self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT)
+
+    def bootToEDL(self):
+        logger.debug("Power cycle to USB boot mode")
+        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        sleep(PRE_RESET_DELAY)
+        self._hid_set_bitmode(self.CMD_GPIO, self.EDL_BIT, self.EDL_BIT | self.POWER_DISABLE_BIT)
+
+    def reset(self):
+        logger.debug("MPU reset pulse")
+        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        sleep(PRE_RESET_DELAY)
+        self._hid_set_bitmode(self.CMD_GPIO, 0x0, self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT)
+
+    def powerOff(self):
+        logger.debug("MPU poweroff")
+        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+
+    def forceUsbcHostMode(self):
+        logger.debug("Forcing host mode")
+        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT)
+        sleep(PRE_RESET_DELAY)
+        self._hid_set_bitmode(self.CMD_GPIO, self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT | self.EDL_BIT)
 
 class FtdiBoard(Board):
     def __init__(self, usb_device, tac_config_path):
