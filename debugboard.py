@@ -142,8 +142,6 @@ class Board(dict):
                     setattr(self, name, method)
 
 
-
-
 class DummyBoard(Board):
     def __init__(self, config_path):
         Board.__init__(self)
@@ -174,6 +172,7 @@ class DummyBoard(Board):
             self.pins.update({f"{pin.pin_number}": pin})
             self.commands.update({f"{pin.command}": f"{pin.command}"})
             setattr(self, pin.command, pin.set)
+
 
 class BughopperV1Board(Board):
     def __init__(self, usb_device):
@@ -229,6 +228,7 @@ class BughopperV1Board(Board):
         sleep(PRE_RESET_DELAY)
         self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK | self.VOL_DOWN_BIT)
 
+
 class BughopperV2Board(Board):
     def __init__(self, usb_device):
         Board.__init__(self)
@@ -276,6 +276,7 @@ class BughopperV2Board(Board):
         self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT)
         sleep(PRE_RESET_DELAY)
         self._hid_set_bitmode(self.CMD_GPIO, self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT | self.EDL_BIT)
+
 
 class FtdiBoard(Board):
     def __init__(self, usb_device, tac_config_path):
@@ -503,6 +504,7 @@ class FtdiPin(Pin):
     def setPort(self, port):
         super().setPort(port)
         self.initialize()
+
 
 class PsocPin(Pin):
     def __init__(self, board, config):
