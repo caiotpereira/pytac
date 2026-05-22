@@ -151,6 +151,8 @@ if __name__ == '__main__':
                         help="Path to directory with TAC configs",
                         default="./tac_configs")
     parser.add_argument("--log-level", help="Log level", default="DEBUG")
+    parser.add_argument("--hostname", default="0.0.0.0", help="Host name that server attaches to")
+    parser.add_argument("--port", default=5000, type=int, help="Port on the host to attach to")
 
     args = parser.parse_args()
     logger.setLevel(args.log_level)
@@ -163,4 +165,4 @@ if __name__ == '__main__':
     for serial in args.serial:
         boards.update({serial: Board.create_board(serial, args.tac_config_path)})
 
-    run_simple("0.0.0.0", 5000, app)
+    run_simple(args.hostname, args.port, app)
