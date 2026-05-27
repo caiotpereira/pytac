@@ -58,6 +58,11 @@ if __name__ == '__main__':
         board = Board.create_board(args.serial, args.tac_config_path)
     if args.config_file_path:
         board = Board.create_from_config(args.config_file_path)
+
+    if board is None:
+        logger.error(f"Failed to create board with serial {args.serial}, board not found")
+        sys.exit(1)
+
     for pin in board.pins.values():
         method_name = f"do_{pin.command}"
         help_name =  f"help_{pin.command}"

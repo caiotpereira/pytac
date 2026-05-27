@@ -1,3 +1,4 @@
+hid
 Flask
 Flask-RESTful
 pyftdi
