@@ -144,7 +144,7 @@ class Board(dict):
             new_script = fix_log_comment.sub(r'self.logComment("\1")', new_script)
 
             d = {}
-            exec(new_script, d)
+            exec(new_script, d)  # pylint: disable=exec-used
 
             # create ports
             self.create_ports()
@@ -152,11 +152,11 @@ class Board(dict):
             # create pins
             self.create_pins()
 
-            for name in d.keys():
+            for name, value in d:
                 if not name.startswith("__"):
                     logger.debug(f"Adding {name}")
                     self.quick_methods.update({name: QuickMethod(self, name)})
-                    method = MethodType(d.get(name), self)
+                    method = MethodType(value, self)
                     setattr(self, name, method)
 
 
@@ -179,7 +179,7 @@ class DummyBoard(Board):
                     self.ports.update({bus_name: DummyPort(bus_name, "123456")})
 
         if "PSOC" in self.config_path:
-            self.ports.update({0: DummyPort("123456")})
+            self.ports.update({0: DummyPort("123456", None)})
 
     def create_pins(self):
         logger.debug("creating pins")
@@ -679,7 +679,10 @@ class PsocPort(Port):
             logger.error("No expect connection")
             sys.exit(1)
 
-    def write(self, value, pin):
+    def write(self, value, pin=None):
+        if not pin:
+            logger.warning("No pin selected")
+            return
         if self.expect_connection and self.expect_connection.isalive():
             self.expect_connection.send("\r")
             self.expect_connection.expect("CMD")

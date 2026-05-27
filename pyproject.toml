@@ -1,0 +1,56 @@
+# Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Pylint configuration
+[tool.pylint.main]
+jobs = 0  # Scale number of jobs to number of CPUs
+recursive = true
+disable = [
+    "format",  # Formatting is handled by black and isort
+    "design",
+    "C0103",  # Method name doesn't conform to snake_case naming style
+    "C0104",  # Disallowed name
+    "C0114",  # Missing module docstring
+    "C0115",  # Missing class docstring
+    "C0116",  # Missing function or method docstring
+    "C0209",  # Formatting a regular string which could be an f-string
+    "C0411",  # Wrong import order. This is handled by `isort --profile black`.
+    "C0412",  # Imports from package %s are not grouped
+    "C0415",  # Import outside toplevel
+    "E0202",  # An attribute defined in %s line %s hides this method
+    "E0401",  # Unable to import '%s'
+    "E1101",  # Instance of x has no y member
+    "W1309",  # Using an f-string that does not have any interpolated variables
+    "R0401",  # Cyclic import (%s -> %s)
+    "R0801",  # Duplicate code
+    "R1702",  # Too many nested blocks
+    "R1705",  # Unnecessary "else" after "return"
+    "R1710",  # Either all return statements in a function should return an expression,
+              # or none of them should.
+    "R1711",  # Useless return at end of function or method
+    "R1720",  # Unnecessary "elif" after "raise"
+    "R1723",  # Unnecessary "else" after "break"
+    "R1724",  # Unnecessary "else" after "continue", remove the "else" and de-indent the code inside it
+    "R1732",  # Consider using 'with' for resource-allocating operations
+    "W0107",  # Unnecessary pass statement
+    "W0201",  # Attribute defined outside __init__
+    "W0212",  # Access to a protected member of a client class
+    "W0221",  # Used when a method has a different number of arguments than
+              # the implemented interface or in an overridden method.
+    "W0223",  # Method is abstract in class but is not overridden in child class
+    "W0237",  # Parameter has been renamed in overriding method
+    "W0511",  # FIXME comments
+    "W0603",  # Using the global statement
+    "W0612",  # Unused variable
+    "W0613",  # Unused argument
+    "W0621",  # Redefining name from outer scope
+    "W0622",  # Redefining built-in
+    "W0632",  # Possible unbalanced tuple unpacking
+    "W0707",  # Consider explicitly re-raising using 'raise x from y'
+    "W0718",  # Catching too general exception
+    "W0719",  # Raising too general exception
+    "W1201",  # Use lazy % formatting in logging functions
+    "W1203",  # Use lazy % or % formatting in logging functions
+    "W1509",  # Using preexec_fn keyword which may be unsafe in the presence of threads
+    "W1514",  # Using open without explicitly specifying an encoding
+]
