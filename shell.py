@@ -4,8 +4,9 @@
 import logging
 import sys
 from argparse import ArgumentParser
-from debugboard import Board
 from cmd import Cmd
+
+from debugboard import Board
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -17,12 +18,14 @@ def make_h(name, comment=None):
         print("When called without parameters, GPIO is set to LOW")
         if comment:
             print(comment)
+
     return h
 
 
 def make_f(quick_method):
     def f(cls, *args):
         quick_method.call()
+
     return f
 
 
@@ -35,14 +38,19 @@ class AlpacaCmd(Cmd):
     do_EOF = do_quit
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serial", help="Debug board serial number")
-    group.add_argument("--config-file-path", help="Path to config file. Only use for debugging the config file syntax")
-    parser.add_argument("--tac-config-path",
-                        help="Path to directory with TAC configs",
-                        default="./tac_configs")
+    group.add_argument(
+        "--config-file-path",
+        help="Path to config file. Only use for debugging the config file syntax",
+    )
+    parser.add_argument(
+        "--tac-config-path",
+        help="Path to directory with TAC configs",
+        default="./tac_configs",
+    )
     parser.add_argument("--log-level", help="Log level", default="DEBUG")
 
     args = parser.parse_args()
@@ -50,7 +58,9 @@ if __name__ == '__main__':
     logger.setLevel(args.log_level)
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(args.log_level)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     board = None
@@ -60,12 +70,14 @@ if __name__ == '__main__':
         board = Board.create_from_config(args.config_file_path)
 
     if board is None:
-        logger.error(f"Failed to create board with serial {args.serial}, board not found")
+        logger.error(
+            f"Failed to create board with serial {args.serial}, board not found"
+        )
         sys.exit(1)
 
     for pin in board.pins.values():
         method_name = f"do_{pin.command}"
-        help_name =  f"help_{pin.command}"
+        help_name = f"help_{pin.command}"
         logger.debug(f"Adding {method_name}")
         method = pin.set
         help_f = make_h(pin.command, pin.get("help_hint"))
@@ -79,4 +91,3 @@ if __name__ == '__main__':
 
     cmd = AlpacaCmd()
     cmd.cmdloop()
-

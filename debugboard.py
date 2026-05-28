@@ -4,16 +4,17 @@
 import json
 import logging
 import os
-import pyudev
 import re
-import serial
 import sys
-import usb
-import hid
-from pyftdi.gpio import GpioAsyncController
-from pexpect import fdpexpect
 from time import sleep
 from types import MethodType
+
+import hid
+import pyudev
+import serial
+import usb
+from pexpect import fdpexpect
+from pyftdi.gpio import GpioAsyncController
 
 logger = logging.getLogger()
 
@@ -23,22 +24,22 @@ PRE_RESET_DELAY = 0.1
 BITMODE_CBUS = 0x20
 
 # USB ctrl transfer request for FT230X CBUS
-SIO_SET_BITMODE_REQUEST = 0x0b
+SIO_SET_BITMODE_REQUEST = 0x0B
 
 
 class TACException(Exception):
     status_code = 420
-    detail = 'Unable to perform requested operation'
+    detail = "Unable to perform requested operation"
 
 
 class Board(dict):
     ID_VENDOR_FTDI = 0x0403
     ID_PRODUCT_FTDI = 0x6011
-    ID_VENDOR_QCOM = 0x05c6
+    ID_VENDOR_QCOM = 0x05C6
     ID_PRODUCT_QCOM = 0x9302
     ID_PRODUCT_BUGHOPPER_V1 = 0x6015
     ID_VENDOR_BUGHOPPER_V2 = 0x2341
-    ID_PRODUCT_BUGHOPPER_V2 = 0xb001
+    ID_PRODUCT_BUGHOPPER_V2 = 0xB001
 
     @classmethod
     def create_from_config(cls, config_file_path):
@@ -48,16 +49,28 @@ class Board(dict):
     def create_board(cls, serial, tac_config_path):
         device = usb.core.find(serial_number=serial)
         if device:
-            if device.idVendor == Board.ID_VENDOR_FTDI and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V1:
+            if (
+                device.idVendor == Board.ID_VENDOR_FTDI
+                and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V1
+            ):
                 logger.debug("Found Bughopper V1")
                 return BughopperV1Board(device)
-            if device.idProduct == Board.ID_PRODUCT_FTDI and device.idVendor == Board.ID_VENDOR_FTDI:
+            if (
+                device.idProduct == Board.ID_PRODUCT_FTDI
+                and device.idVendor == Board.ID_VENDOR_FTDI
+            ):
                 logger.debug("Found FTDI Board")
                 return FtdiBoard(device, tac_config_path)
-            if device.idProduct == Board.ID_PRODUCT_QCOM and device.idVendor == Board.ID_VENDOR_QCOM:
+            if (
+                device.idProduct == Board.ID_PRODUCT_QCOM
+                and device.idVendor == Board.ID_VENDOR_QCOM
+            ):
                 logger.debug("Found Psoc Board")
                 return PsocBoard(device, tac_config_path)
-            if device.idVendor == Board.ID_VENDOR_BUGHOPPER_V2 and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V2:
+            if (
+                device.idVendor == Board.ID_VENDOR_BUGHOPPER_V2
+                and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V2
+            ):
                 logger.debug("Found Bughopper V2")
                 return BughopperV2Board(device)
 
@@ -67,16 +80,15 @@ class Board(dict):
         self.commands = {}
         self.quick_methods = {}
         self.usb_device = None
-        dict.__init__(self,
-                      ports=self.ports,
-                      pins=self.pins,
-                      quick_methods=self.quick_methods)
+        dict.__init__(
+            self, ports=self.ports, pins=self.pins, quick_methods=self.quick_methods
+        )
 
     def logComment(self, comment):
         print(comment)
 
     def delay(self, length):
-        d = float(length/1000)
+        d = float(length / 1000)
         self.logComment(f"Sleeping for {d} seconds")
         sleep(d)
 
@@ -112,21 +124,28 @@ class Board(dict):
             new_script = fix_functions2.sub("(self):\r", new_script)
 
             # add brackets to function calls
-            fix_no_parenthesis = re.compile(r"([A-Za-z0-9_]+)\s([0-9]+)\s?", re.MULTILINE)
+            fix_no_parenthesis = re.compile(
+                r"([A-Za-z0-9_]+)\s([0-9]+)\s?", re.MULTILINE
+            )
             new_script = fix_no_parenthesis.sub(r"self.\1(\2)\n", new_script)
 
             # fixes syntax of internal function calls
             fix_no_parenthesis_func = re.compile(r"\t([A-Za-z0-9_]+)$", re.MULTILINE)
             new_script = fix_no_parenthesis_func.sub(r"\tself.\1()", new_script)
 
-            fix_no_parenthesis_empty = re.compile(r"self.([A-Za-z0-9_]+)\s?$", re.MULTILINE)
+            fix_no_parenthesis_empty = re.compile(
+                r"self.([A-Za-z0-9_]+)\s?$", re.MULTILINE
+            )
             new_script = fix_no_parenthesis_empty.sub(r"self.\1()", new_script)
 
-            fix_log_comment = re.compile(r"logComment\s([a-zA-Z0-9=_\ ]+)\s?$", re.MULTILINE)
+            fix_log_comment = re.compile(
+                r"logComment\s([a-zA-Z0-9=_\ ]+)\s?$", re.MULTILINE
+            )
             new_script = fix_log_comment.sub(r'self.logComment("\1")', new_script)
 
             d = {}
-            exec(new_script, d)
+            # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
+            exec(new_script, d)  # pylint: disable=exec-used
 
             # create ports
             self.create_ports()
@@ -134,11 +153,11 @@ class Board(dict):
             # create pins
             self.create_pins()
 
-            for name in d.keys():
+            for name, value in d:
                 if not name.startswith("__"):
                     logger.debug(f"Adding {name}")
                     self.quick_methods.update({name: QuickMethod(self, name)})
-                    method = MethodType(d.get(name), self)
+                    method = MethodType(value, self)
                     setattr(self, name, method)
 
 
@@ -161,7 +180,7 @@ class DummyBoard(Board):
                     self.ports.update({bus_name: DummyPort(bus_name, "123456")})
 
         if "PSOC" in self.config_path:
-            self.ports.update({0: DummyPort("123456")})
+            self.ports.update({0: DummyPort("123456", None)})
 
     def create_pins(self):
         logger.debug("creating pins")
@@ -182,20 +201,22 @@ class BughopperV1Board(Board):
         self.quick_methods.update({"bootToEDL": QuickMethod(self, "bootToEDL")})
         self.quick_methods.update({"powerOff": QuickMethod(self, "powerOff")})
         self.quick_methods.update({"reset": QuickMethod(self, "reset")})
-        self.quick_methods.update({"forceUsbcHostMode": QuickMethod(self, "forceUsbcHostMode")})
+        self.quick_methods.update(
+            {"forceUsbcHostMode": QuickMethod(self, "forceUsbcHostMode")}
+        )
 
         self.EDL_BIT = 0b00000001
         self.POWER_DISABLE_BIT = 0b00000100
         self.VOL_DOWN_BIT = 0b00001000
 
-        self.EDL_MASK = self.EDL_BIT<<4
-        self.POWER_DISABLE_MASK = self.POWER_DISABLE_BIT<<4
-        self.VOL_DOWN_MASK = self.VOL_DOWN_BIT<<4
+        self.EDL_MASK = self.EDL_BIT << 4
+        self.POWER_DISABLE_MASK = self.POWER_DISABLE_BIT << 4
+        self.VOL_DOWN_MASK = self.VOL_DOWN_BIT << 4
 
     def _ftdi_set_bitmode(self, bitmask):
-        bmRequestType = usb.util.build_request_type(usb.util.CTRL_OUT,
-                                                    usb.util.CTRL_TYPE_VENDOR,
-                                                    usb.util.CTRL_RECIPIENT_DEVICE)
+        bmRequestType = usb.util.build_request_type(
+            usb.util.CTRL_OUT, usb.util.CTRL_TYPE_VENDOR, usb.util.CTRL_RECIPIENT_DEVICE
+        )
 
         wValue = bitmask | (BITMODE_CBUS << 8)
         self.usb_device.ctrl_transfer(bmRequestType, SIO_SET_BITMODE_REQUEST, wValue)
@@ -204,7 +225,9 @@ class BughopperV1Board(Board):
         logger.debug("Power cycle to normal boot mode")
         self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.POWER_DISABLE_BIT)
         sleep(PRE_RESET_DELAY)
-        self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK)
+        self._ftdi_set_bitmode(
+            self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK
+        )
 
     def bootToEDL(self):
         logger.debug("Power cycle to USB boot mode")
@@ -216,7 +239,9 @@ class BughopperV1Board(Board):
         logger.debug("MPU reset pulse")
         self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.POWER_DISABLE_BIT)
         sleep(PRE_RESET_DELAY)
-        self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK)
+        self._ftdi_set_bitmode(
+            self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK
+        )
 
     def powerOff(self):
         logger.debug("MPU poweroff")
@@ -224,9 +249,19 @@ class BughopperV1Board(Board):
 
     def forceUsbcHostMode(self):
         logger.debug("Forcing host mode")
-        self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.VOL_DOWN_MASK | self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT)
+        self._ftdi_set_bitmode(
+            self.POWER_DISABLE_MASK
+            | self.VOL_DOWN_MASK
+            | self.POWER_DISABLE_BIT
+            | self.VOL_DOWN_BIT
+        )
         sleep(PRE_RESET_DELAY)
-        self._ftdi_set_bitmode(self.POWER_DISABLE_MASK | self.EDL_MASK | self.VOL_DOWN_MASK | self.VOL_DOWN_BIT)
+        self._ftdi_set_bitmode(
+            self.POWER_DISABLE_MASK
+            | self.EDL_MASK
+            | self.VOL_DOWN_MASK
+            | self.VOL_DOWN_BIT
+        )
 
 
 class BughopperV2Board(Board):
@@ -238,7 +273,9 @@ class BughopperV2Board(Board):
         self.quick_methods.update({"bootToEDL": QuickMethod(self, "bootToEDL")})
         self.quick_methods.update({"powerOff": QuickMethod(self, "powerOff")})
         self.quick_methods.update({"reset": QuickMethod(self, "reset")})
-        self.quick_methods.update({"forceUsbcHostMode": QuickMethod(self, "forceUsbcHostMode")})
+        self.quick_methods.update(
+            {"forceUsbcHostMode": QuickMethod(self, "forceUsbcHostMode")}
+        )
 
         self.CMD_GPIO = 0x1
 
@@ -251,45 +288,78 @@ class BughopperV2Board(Board):
 
     def powerOn(self):
         logger.debug("Power cycle to normal boot mode")
-        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT
+        )
         sleep(PRE_RESET_DELAY)
-        self._hid_set_bitmode(self.CMD_GPIO, 0x0, self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO,
+            0x0,
+            self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT,
+        )
 
     def bootToEDL(self):
         logger.debug("Power cycle to USB boot mode")
-        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT
+        )
         sleep(PRE_RESET_DELAY)
-        self._hid_set_bitmode(self.CMD_GPIO, self.EDL_BIT, self.EDL_BIT | self.POWER_DISABLE_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO, self.EDL_BIT, self.EDL_BIT | self.POWER_DISABLE_BIT
+        )
 
     def reset(self):
         logger.debug("MPU reset pulse")
-        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT
+        )
         sleep(PRE_RESET_DELAY)
-        self._hid_set_bitmode(self.CMD_GPIO, 0x0, self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO,
+            0x0,
+            self.POWER_DISABLE_BIT | self.EDL_BIT | self.VOL_DOWN_BIT,
+        )
 
     def powerOff(self):
         logger.debug("MPU poweroff")
-        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO, self.POWER_DISABLE_BIT, self.POWER_DISABLE_BIT
+        )
 
     def forceUsbcHostMode(self):
         logger.debug("Forcing host mode")
-        self._hid_set_bitmode(self.CMD_GPIO, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO,
+            self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT,
+            self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT,
+        )
         sleep(PRE_RESET_DELAY)
-        self._hid_set_bitmode(self.CMD_GPIO, self.VOL_DOWN_BIT, self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT | self.EDL_BIT)
+        self._hid_set_bitmode(
+            self.CMD_GPIO,
+            self.VOL_DOWN_BIT,
+            self.POWER_DISABLE_BIT | self.VOL_DOWN_BIT | self.EDL_BIT,
+        )
 
 
 class FtdiBoard(Board):
     def __init__(self, usb_device, tac_config_path):
         Board.__init__(self)
         self.usb_device = usb_device
-        conf = os.path.join(tac_config_path, "TAC_FTDI_13.tcnf")  # default config for FTDI Alpaca-lite
+        conf = os.path.join(
+            tac_config_path, "TAC_FTDI_13.tcnf"
+        )  # default config for FTDI Alpaca-lite
         f = open(os.path.join(tac_config_path, "devicelist.json"), "r")
         device_list = json.loads(f.read())
         f.close()
         catalog = device_list.get("catalog")
-        conf_dict = next((x for x in catalog if x.get("usb_descriptor") == self.usb_device.product), None)
+        conf_dict = next(
+            (x for x in catalog if x.get("usb_descriptor") == self.usb_device.product),
+            None,
+        )
         if conf_dict:
-            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
+            conf = os.path.join(
+                tac_config_path, os.path.basename(conf_dict.get("configPath"))
+            )
 
         if conf is None:
             logger.error("No matching FTDI config found")
@@ -304,7 +374,9 @@ class FtdiBoard(Board):
         for p in self.full_config.get("bus"):
             bus_name = p.get("bus")
             if p.get("bus_function") == 2:
-                self.ports.update({bus_name: FtdiPort(bus_name, self.usb_device.serial_number)})
+                self.ports.update(
+                    {bus_name: FtdiPort(bus_name, self.usb_device.serial_number)}
+                )
 
     def create_pins(self):
         for p in self.full_config.get("pins"):
@@ -328,9 +400,13 @@ class PsocBoard(Board):
         f.close()
         catalog = device_list.get("catalog")
         self.board_id = self.__get_board_id()
-        conf_dict = next((x for x in catalog if x.get("platform_id") == self.board_id), None)
+        conf_dict = next(
+            (x for x in catalog if x.get("platform_id") == self.board_id), None
+        )
         if conf_dict:
-            conf = os.path.join(tac_config_path, os.path.basename(conf_dict.get("configPath")))
+            conf = os.path.join(
+                tac_config_path, os.path.basename(conf_dict.get("configPath"))
+            )
 
         if conf is None:
             logger.error("No matching PSOC config found")
@@ -341,9 +417,15 @@ class PsocBoard(Board):
         f.close()
         self.parse_script()
         self.quick_methods.update({"devicePowerOn": QuickMethod(self, "devicePowerOn")})
-        self.quick_methods.update({"devicePowerOff": QuickMethod(self, "devicePowerOff")})
-        self.quick_methods.update({"usbDevicePowerOn": QuickMethod(self, "usbDevicePowerOn")})
-        self.quick_methods.update({"usbDevicePowerOff": QuickMethod(self, "usbDevicePowerOff")})
+        self.quick_methods.update(
+            {"devicePowerOff": QuickMethod(self, "devicePowerOff")}
+        )
+        self.quick_methods.update(
+            {"usbDevicePowerOn": QuickMethod(self, "usbDevicePowerOn")}
+        )
+        self.quick_methods.update(
+            {"usbDevicePowerOff": QuickMethod(self, "usbDevicePowerOff")}
+        )
 
     def devicePower(self, value):
         logger.debug(f"Calling devicePower {value}")
@@ -397,10 +479,10 @@ class PsocBoard(Board):
             logger.error("Expect connection not created")
             sys.exit(1)
 
-        expect_connection.send('\r')
-        expect_connection.expect('CMD')
+        expect_connection.send("\r")
+        expect_connection.expect("CMD")
         expect_connection.send("getboardid\r")
-        expect_connection.expect('ok')
+        expect_connection.expect("ok")
         ret_value = expect_connection.before
         expect_connection.close()
         # find returned value
@@ -408,7 +490,6 @@ class PsocBoard(Board):
         if r:
             return int(r.group(0))
         return None
-
 
     def create_ports(self):
         self.ports.update({0: PsocPort(self.usb_device.serial_number)})
@@ -452,16 +533,18 @@ class Pin(dict):
         self.pin_number = int(config.get("pin_number"))
         self.help_hint = config.get("help_hint")
         self.port = None
-        dict.__init__(self,
-                      bus=self.bus,
-                      command=self.command,
-                      initial_value=self.initial_value,
-                      value=self.value,
-                      input=self.input,
-                      inverted=self.inverted,
-                      pin_number=self.pin_number,
-                      help_hint=self.help_hint,
-                      port=self.port)
+        dict.__init__(
+            self,
+            bus=self.bus,
+            command=self.command,
+            initial_value=self.initial_value,
+            value=self.value,
+            input=self.input,
+            inverted=self.inverted,
+            pin_number=self.pin_number,
+            help_hint=self.help_hint,
+            port=self.port,
+        )
 
     def set(self, value):
         self.value = value
@@ -545,6 +628,7 @@ class Port(dict):
     def close(self):
         raise NotImplementedError()
 
+
 class DummyPort(Port):
     def write(self, value, pin=None):
         logger.info(f"Writing to port {self.bus} {self.serial}")
@@ -586,31 +670,34 @@ class PsocPort(Port):
     def call_method(self, method, value):
         logger.debug(f"Calling {method} {value}")
         if self.expect_connection and self.expect_connection.isalive():
-            self.expect_connection.send('\r')
-            self.expect_connection.expect('CMD')
+            self.expect_connection.send("\r")
+            self.expect_connection.expect("CMD")
             message = f"{method} {value}\r"
 
             self.expect_connection.send(message)
-            self.expect_connection.expect('ok')
+            self.expect_connection.expect("ok")
         else:
             logger.error("No expect connection")
             sys.exit(1)
 
-    def write(self, value, pin):
+    def write(self, value, pin=None):
+        if not pin:
+            logger.warning("No pin selected")
+            return
         if self.expect_connection and self.expect_connection.isalive():
-            self.expect_connection.send('\r')
-            self.expect_connection.expect('CMD')
+            self.expect_connection.send("\r")
+            self.expect_connection.expect("CMD")
             message = f"pin {value} {pin}\r"
 
             self.expect_connection.send(message)
-            self.expect_connection.expect('ok')
+            self.expect_connection.expect("ok")
         else:
             logger.error("No expect connection")
             sys.exit(1)
 
 
 class FtdiPort(Port):
-    def __init__(self, bus, serial, direction=0xff):
+    def __init__(self, bus, serial, direction=0xFF):
         Port.__init__(self, bus, serial)
         self.direction = direction
         self.port = ord(self.bus) - ord("A") + 1
@@ -628,4 +715,3 @@ class FtdiPort(Port):
     def close(self):
         logger.debug(f"Closing port {self.bus}")
         self.gpio.close()
-
