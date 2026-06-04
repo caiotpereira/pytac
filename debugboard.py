@@ -153,11 +153,11 @@ class Board(dict):
             # create pins
             self.create_pins()
 
-            for name, value in d:
+            for name in d.keys():  # pylint: disable=consider-iterating-dictionary
                 if not name.startswith("__"):
                     logger.debug(f"Adding {name}")
                     self.quick_methods.update({name: QuickMethod(self, name)})
-                    method = MethodType(value, self)
+                    method = MethodType(d.get(name), self)
                     setattr(self, name, method)
 
 
