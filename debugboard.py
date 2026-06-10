@@ -9,7 +9,6 @@ import sys
 from time import sleep
 from types import MethodType
 
-import hid
 import pyudev
 import serial
 import usb
@@ -17,6 +16,13 @@ from pexpect import fdpexpect
 from pyftdi.gpio import GpioAsyncController
 
 logger = logging.getLogger()
+
+try:
+    import hid
+except ImportError as e:
+    # ignore importing hid. It's only required for bughopper v2.
+    logger.error(e)
+    pass
 
 # wait time for other GPIOs to be truly set before touching the reset GPIO
 PRE_RESET_DELAY = 0.1
@@ -72,6 +78,12 @@ class Board(dict):
                 and device.idProduct == Board.ID_PRODUCT_BUGHOPPER_V2
             ):
                 logger.debug("Found Bughopper V2")
+                if "hid" not in sys.modules:
+                    logger.error(
+                        "hid module not loaded. Check if the required packages are installed"
+                    )
+                    sys.exit(1)
+
                 return BughopperV2Board(device)
 
     def __init__(self):
