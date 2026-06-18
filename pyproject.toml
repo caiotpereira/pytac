@@ -1,6 +1,41 @@
 # Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytac"
+version = "1.4.0"
+description = "Python Test Automation Controller (TAC/Alpaca) for Qualcomm debug boards"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+dependencies = [
+    "Flask",
+    "Flask-RESTful",
+    "pyftdi",
+    "pyusb",
+    "pexpect",
+    "pyserial",
+    "pyudev",
+    "requests",
+    "hid",
+]
+
+[project.scripts]
+pytac = "pytac.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/qualcomm/pytac"
+
+[tool.setuptools]
+packages = ["pytac"]
+
+[tool.setuptools.package-data]
+pytac = ["tac_configs/*"]
+
 # Pylint configuration
 [tool.pylint.main]
 jobs = 0  # Scale number of jobs to number of CPUs
