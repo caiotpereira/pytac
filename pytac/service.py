@@ -4,15 +4,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import logging
-import sys
-from argparse import ArgumentParser
 
 from flask import Flask
 from flask_restful import Api, Resource, reqparse
 from werkzeug.exceptions import BadRequest
 from werkzeug.serving import run_simple
 
-from debugboard import Board, TACException
+from .debugboard import Board, TACException
 
 app = Flask(__name__)
 api = Api(app)
@@ -148,35 +146,8 @@ api.add_resource(CommandView, "/<boardid>/command/<name>")
 api.add_resource(CommandList, "/<boardid>/command")
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--serial", nargs="+", help="Debug board serial number", required=True
-    )
-    parser.add_argument(
-        "--tac-config-path",
-        help="Path to directory with TAC configs",
-        default="./tac_configs",
-    )
-    parser.add_argument("--log-level", help="Log level", default="DEBUG")
-    parser.add_argument(
-        "--hostname", default="0.0.0.0", help="Host name that server attaches to"
-    )
-    parser.add_argument(
-        "--port", default=5000, type=int, help="Port on the host to attach to"
-    )
+def run_service(serials, tac_config_path, hostname="0.0.0.0", port=5000):
+    for serial in serials:
+        boards.update({serial: Board.create_board(serial, tac_config_path)})
 
-    args = parser.parse_args()
-    logger.setLevel(args.log_level)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(args.log_level)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-    for serial in args.serial:
-        boards.update({serial: Board.create_board(serial, args.tac_config_path)})
-
-    run_simple(args.hostname, args.port, app)
+    run_simple(hostname, port, app)
