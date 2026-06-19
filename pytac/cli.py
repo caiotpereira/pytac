@@ -39,6 +39,13 @@ def build_parser():
         help="Run the interactive shell (default)",
     )
     mode.add_argument("--service", action="store_true", help="Run the REST API service")
+    mode.add_argument(
+        "--oneshot",
+        nargs="+",
+        metavar="COMMAND",
+        help="Run a single command and exit, e.g. --oneshot bootToEDL. "
+        "Pin commands take a value: --oneshot pkey 1",
+    )
 
     parser.add_argument(
         "--serial",
@@ -86,6 +93,15 @@ def main(argv=None):
         from .service import run_service
 
         run_service(args.serial, args.tac_config_path, args.hostname, args.port)
+    elif args.oneshot:
+        if not args.serial and not args.config_file_path:
+            parser.error("--oneshot requires --serial or --config-file-path")
+        from .shell import run_oneshot
+
+        command = args.oneshot[0]
+        value = args.oneshot[1] if len(args.oneshot) > 1 else None
+        serial = args.serial[0] if args.serial else None
+        run_oneshot(command, serial, args.config_file_path, args.tac_config_path, value)
     else:  # --shell
         if not args.serial and not args.config_file_path:
             parser.error("--shell requires --serial or --config-file-path")

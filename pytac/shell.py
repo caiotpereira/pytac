@@ -36,7 +36,7 @@ class AlpacaCmd(Cmd):
     do_EOF = do_quit
 
 
-def run_shell(serial=None, config_file_path=None, tac_config_path=None):
+def _create_board(serial, config_file_path, tac_config_path):
     board = None
     if serial:
         board = Board.create_board(serial, tac_config_path)
@@ -46,6 +46,35 @@ def run_shell(serial=None, config_file_path=None, tac_config_path=None):
     if board is None:
         logger.error(f"Failed to create board with serial {serial}, board not found")
         sys.exit(1)
+    return board
+
+
+def run_oneshot(
+    command, serial=None, config_file_path=None, tac_config_path=None, value=None
+):
+    board = _create_board(serial, config_file_path, tac_config_path)
+
+    func = getattr(board, command, None)
+    if not callable(func):
+        available = sorted([*board.quick_methods, *board.commands])
+        logger.error(
+            f"Unknown command '{command}'. Available commands: {', '.join(available)}"
+        )
+        sys.exit(1)
+
+    if value is None:
+        func()
+    else:
+        try:
+            value = int(value)
+        except ValueError:
+            logger.error(f"Command '{command}' value must be an integer, got '{value}'")
+            sys.exit(1)
+        func(value)
+
+
+def run_shell(serial=None, config_file_path=None, tac_config_path=None):
+    board = _create_board(serial, config_file_path, tac_config_path)
 
     for pin in board.pins.values():
         method_name = f"do_{pin.command}"
