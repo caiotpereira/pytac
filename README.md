@@ -5,9 +5,20 @@ It uses config files and PSOC firmware from the original TAC (Alpaca) system.
 
 # Installation
 
+Install the `pytac` command on your system with [pipx](https://pipx.pypa.io):
+
+    pipx install .
+
+This puts a single `pytac` entry point on your `PATH`. Note that the `hid`
+dependency needs `libhidapi` package to be installed (required for Bughopper V2 boards).
+
+Alternatively, for development in a virtualenv:
+
     virtualenv -p python3 venv
     . ./venv/bin/activate
-    pip install -r requirements.txt
+    pip install -e .
+
+Run `pytac -h` to see all available options.
 
 ## USB permissions
 
@@ -23,10 +34,22 @@ Then make sure your user is in the `plugdev` group (log out and back in after):
 
 # Configuration
 
-PyTAC requires board configuration files in a `tac_configs/` directory (default: `./tac_configs`),
-which can be copied from [qcom-test-automation-controller](https://github.com/qualcomm/qcom-test-automation-controller/tree/main/configurations) project.
+**Bughopper boards (V1 and V2) work out of the box.** They are self-describing and need no
+config files.
 
-`devicelist.json` maps board hardware IDs to their `.tcnf` config files. Example entry for a PSOC board:
+**All other debug boards (FTDI, PSOC) require configuration files** that are NOT shipped with
+pytac. You must obtain them yourself before these boards will work:
+
+1. Copy the `configurations/` directory (the `.tcnf` files and `devicelist.json`) from the
+   [qcom-test-automation-controller](https://github.com/qualcomm/qcom-test-automation-controller/tree/main/configurations)
+   project into a directory of your choice.
+2. Point pytac at that directory with `--tac-config-path <dir>`.
+
+Note: some configs in qcom-test-automation-controller currently have syntax issues; pick the
+ones that match your board.
+
+`devicelist.json` maps board hardware IDs to their `.tcnf` config files, and must be present in
+the `--tac-config-path` directory for FTDI/PSOC boards. Example entry for a PSOC board:
 
     {
       "catalog": [
@@ -49,12 +72,14 @@ Or using `lsusb` (replace `VID:PID` with `0403:6011` for FTDI or `05c6:9302` for
 
 # Using as a shell
 
-    python3 shell.py --serial <ID_SERIAL_SHORT>
+The shell is the default mode, so `--shell` is optional:
+
+    pytac --serial <ID_SERIAL_SHORT>
 
 Optional arguments:
 
-    --tac-config-path ./tac_configs   # path to config directory (default: ./tac_configs)
-    --log-level DEBUG                 # log verbosity (default: DEBUG)
+    --tac-config-path <dir>   # path to config directory (required for FTDI/PSOC boards, see Configuration)
+    --log-level DEBUG         # log verbosity (default: DEBUG)
 
 Once started, the shell prompt accepts commands generated from your board's config script. The available commands depend on the config — not all boards define every command (e.g. newer configs may omit `powerOn`/`powerOff`). Typical commands:
 
@@ -85,7 +110,7 @@ Type `help` in the shell to list all commands available for your specific board.
 
 # Using as a service
 
-    python3 rest.py --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
+    pytac --service --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
 
 The REST API runs on `http://localhost:5000`. Example usage with curl:
 

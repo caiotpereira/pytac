@@ -3,13 +3,11 @@
 
 import logging
 import sys
-from argparse import ArgumentParser
 from cmd import Cmd
 
-from debugboard import Board
+from .debugboard import Board
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
 
 
 def make_h(name, comment=None):
@@ -38,41 +36,15 @@ class AlpacaCmd(Cmd):
     do_EOF = do_quit
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--serial", help="Debug board serial number")
-    group.add_argument(
-        "--config-file-path",
-        help="Path to config file. Only use for debugging the config file syntax",
-    )
-    parser.add_argument(
-        "--tac-config-path",
-        help="Path to directory with TAC configs",
-        default="./tac_configs",
-    )
-    parser.add_argument("--log-level", help="Log level", default="DEBUG")
-
-    args = parser.parse_args()
-
-    logger.setLevel(args.log_level)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(args.log_level)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+def run_shell(serial=None, config_file_path=None, tac_config_path=None):
     board = None
-    if args.serial:
-        board = Board.create_board(args.serial, args.tac_config_path)
-    if args.config_file_path:
-        board = Board.create_from_config(args.config_file_path)
+    if serial:
+        board = Board.create_board(serial, tac_config_path)
+    if config_file_path:
+        board = Board.create_from_config(config_file_path)
 
     if board is None:
-        logger.error(
-            f"Failed to create board with serial {args.serial}, board not found"
-        )
+        logger.error(f"Failed to create board with serial {serial}, board not found")
         sys.exit(1)
 
     for pin in board.pins.values():
