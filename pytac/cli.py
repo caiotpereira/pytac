@@ -33,6 +33,10 @@ def build_parser():
     )
 
     # Options shared by every subcommand.
+    base = ArgumentParser(add_help=False)
+    base.add_argument("--log-level", default="DEBUG", help="Log level (default: DEBUG)")
+
+    # Options shared by the board-driving subcommands.
     common = ArgumentParser(add_help=False)
     common.add_argument(
         "--serial",
@@ -45,14 +49,17 @@ def build_parser():
         help="Path to directory with TAC configs (devicelist.json + .tcnf "
         "files). Required for FTDI/PSOC boards; Bughopper boards need no configs.",
     )
-    common.add_argument(
-        "--log-level", default="DEBUG", help="Log level (default: DEBUG)"
-    )
 
     subparsers = parser.add_subparsers(dest="mode", required=True, metavar="COMMAND")
 
+    subparsers.add_parser(
+        "list",
+        parents=[base],
+        help="List connected debug boards and their serial numbers",
+    )
+
     shell = subparsers.add_parser(
-        "shell", parents=[common], help="Run the interactive shell"
+        "shell", parents=[base, common], help="Run the interactive shell"
     )
     shell.add_argument(
         "--config-file-path",
@@ -60,7 +67,7 @@ def build_parser():
     )
 
     oneshot = subparsers.add_parser(
-        "oneshot", parents=[common], help="Run a single command and exit"
+        "oneshot", parents=[base, common], help="Run a single command and exit"
     )
     oneshot.add_argument("command", help="Command to run, e.g. bootToEDL")
     oneshot.add_argument(
@@ -74,7 +81,7 @@ def build_parser():
     )
 
     service = subparsers.add_parser(
-        "service", parents=[common], help="Run the REST API service"
+        "service", parents=[base, common], help="Run the REST API service"
     )
     service.add_argument(
         "--hostname",
@@ -90,13 +97,30 @@ def build_parser():
     return parser
 
 
+def _list_boards():
+    from .debugboard import Board
+
+    boards = Board.list_boards()
+    if not boards:
+        print("No connected debug boards found.")
+        return
+
+    print("Connected debug boards:")
+    for board in boards:
+        serial = board["serial"] or "<no serial reported>"
+        vid_pid = f"{board['vid']:04x}:{board['pid']:04x}"
+        print(f"  {board['type']:<14} vid:pid={vid_pid}  serial={serial}")
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
     _setup_logging(args.log_level)
 
-    if args.mode == "service":
+    if args.mode == "list":
+        _list_boards()
+    elif args.mode == "service":
         if not args.serial:
             parser.error("service requires --serial")
         from .service import run_service

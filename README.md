@@ -62,7 +62,19 @@ the `--tac-config-path` directory for FTDI/PSOC boards. Example entry for a PSOC
 
 ## Finding your board's serial number
 
-The `--serial` argument takes the USB serial number, not a device path. Find it with:
+The `--serial` argument takes the USB serial number, not a device path. The easiest way to
+discover connected boards and their serial numbers is the `list` subcommand:
+
+    pytac list
+
+It prints every recognised debug board with its type, USB vendor/product ID, and serial number
+(read from udev, the same `ID_SERIAL_SHORT` value you pass to `--serial`):
+
+    Connected debug boards:
+      Bughopper V1   vid:pid=0403:6015  serial=DP05DIAN
+      PSOC           vid:pid=05c6:9302  serial=0123456789
+
+Alternatively, find it manually with `udevadm`:
 
     udevadm info /dev/ttyACM0 | grep ID_SERIAL_SHORT
 
