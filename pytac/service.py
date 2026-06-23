@@ -46,7 +46,7 @@ class QuickMethodView(Resource):
         if b:
             try:
                 getattr(b, name)()
-            except:
+            except Exception:
                 raise TACException
         return b.pins
 
@@ -77,7 +77,7 @@ class CommandView(Resource):
                 c = getattr(b, name)
                 if c:
                     c(value)
-            except:
+            except Exception:
                 raise TACException
         return b.pins
 
