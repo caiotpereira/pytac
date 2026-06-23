@@ -91,7 +91,6 @@ class CommandList(Resource):
 
 
 class PinView(Resource):
-
     def get(self, boardid, pinid):
         b = boards.get(boardid, {})
         if b:
