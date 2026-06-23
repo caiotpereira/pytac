@@ -72,9 +72,9 @@ Or using `lsusb` (replace `VID:PID` with `0403:6011` for FTDI or `05c6:9302` for
 
 # Using as a shell
 
-The shell is the default mode, so `--shell` is optional:
+Start the interactive shell with the `shell` subcommand:
 
-    pytac --serial <ID_SERIAL_SHORT>
+    pytac shell --serial <ID_SERIAL_SHORT>
 
 Optional arguments:
 
@@ -110,23 +110,23 @@ Type `help` in the shell to list all commands available for your specific board.
 
 # Running a single command
 
-Use `--oneshot` to run one command and exit, without entering the interactive shell. This is
-handy for scripting:
+Use the `oneshot` subcommand to run one command and exit, without entering the interactive
+shell. This is handy for scripting:
 
-    pytac --serial <ID_SERIAL_SHORT> --oneshot bootToEDL
-    pytac --serial <ID_SERIAL_SHORT> --oneshot reset
+    pytac oneshot bootToEDL --serial <ID_SERIAL_SHORT>
+    pytac oneshot reset --serial <ID_SERIAL_SHORT>
 
 GPIO pin commands take an integer value (`1` to assert, `0` to deassert):
 
-    pytac --serial <ID_SERIAL_SHORT> --oneshot pkey 1
-    pytac --serial <ID_SERIAL_SHORT> --oneshot pkey 0
+    pytac oneshot pkey 1 --serial <ID_SERIAL_SHORT>
+    pytac oneshot pkey 0 --serial <ID_SERIAL_SHORT>
 
 The same commands available in the shell can be used here. An unknown command exits with an
 error listing the commands supported by your board.
 
 # Using as a service
 
-    pytac --service --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
+    pytac service --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
 
 The REST API runs on `http://localhost:5000`. Example usage with curl:
 
