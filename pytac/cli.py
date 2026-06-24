@@ -32,53 +32,84 @@ def build_parser():
         "--version", action="version", version=f"%(prog)s {__version__}"
     )
 
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--shell",
-        action="store_true",
-        help="Run the interactive shell (default)",
-    )
-    mode.add_argument("--service", action="store_true", help="Run the REST API service")
-    mode.add_argument(
-        "--oneshot",
-        nargs="+",
-        metavar="COMMAND",
-        help="Run a single command and exit, e.g. --oneshot bootToEDL. "
-        "Pin commands take a value: --oneshot pkey 1",
-    )
+    # Options shared by every subcommand.
+    base = ArgumentParser(add_help=False)
+    base.add_argument("--log-level", default="DEBUG", help="Log level (default: DEBUG)")
 
-    parser.add_argument(
+    # Options shared by the board-driving subcommands.
+    common = ArgumentParser(add_help=False)
+    common.add_argument(
         "--serial",
         nargs="+",
-        help="Debug board serial number(s). Required for --service "
-        "(one or more); for --shell a single serial is used.",
+        help="Debug board serial number(s)",
     )
-    parser.add_argument(
-        "--config-file-path",
-        help="Path to a single config file. --shell only; use for debugging "
-        "the config file syntax.",
-    )
-    parser.add_argument(
+    common.add_argument(
         "--tac-config-path",
         default=DEFAULT_TAC_CONFIG_PATH,
         help="Path to directory with TAC configs (devicelist.json + .tcnf "
         "files). Required for FTDI/PSOC boards; Bughopper boards need no configs.",
     )
-    parser.add_argument(
-        "--log-level", default="DEBUG", help="Log level (default: DEBUG)"
+
+    subparsers = parser.add_subparsers(dest="mode", required=True, metavar="COMMAND")
+
+    subparsers.add_parser(
+        "list",
+        parents=[base],
+        help="List connected debug boards and their serial numbers",
     )
-    parser.add_argument(
+
+    shell = subparsers.add_parser(
+        "shell", parents=[base, common], help="Run the interactive shell"
+    )
+    shell.add_argument(
+        "--config-file-path",
+        help="Path to a single config file; use for debugging the config file syntax.",
+    )
+
+    oneshot = subparsers.add_parser(
+        "oneshot", parents=[base, common], help="Run a single command and exit"
+    )
+    oneshot.add_argument("command", help="Command to run, e.g. bootToEDL")
+    oneshot.add_argument(
+        "value",
+        nargs="?",
+        help="Optional integer value for pin commands, e.g. 1",
+    )
+    oneshot.add_argument(
+        "--config-file-path",
+        help="Path to a single config file; use for debugging the config file syntax.",
+    )
+
+    service = subparsers.add_parser(
+        "service", parents=[base, common], help="Run the REST API service"
+    )
+    service.add_argument(
         "--hostname",
         default="0.0.0.0",
-        help="--service only: host name the server attaches to (default: 0.0.0.0)",
+        help="Host name the server attaches to (default: 0.0.0.0)",
     )
-    parser.add_argument(
+    service.add_argument(
         "--port",
         default=5000,
         type=int,
-        help="--service only: port on the host to attach to (default: 5000)",
+        help="Port on the host to attach to (default: 5000)",
     )
     return parser
+
+
+def _list_boards():
+    from .debugboard import Board
+
+    boards = Board.list_boards()
+    if not boards:
+        print("No connected debug boards found.")
+        return
+
+    print("Connected debug boards:")
+    for board in boards:
+        serial = board["serial"] or "<no serial reported>"
+        vid_pid = f"{board['vid']:04x}:{board['pid']:04x}"
+        print(f"  {board['type']:<14} vid:pid={vid_pid}  serial={serial}")
 
 
 def main(argv=None):
@@ -87,24 +118,30 @@ def main(argv=None):
 
     _setup_logging(args.log_level)
 
-    if args.service:
+    if args.mode == "list":
+        _list_boards()
+    elif args.mode == "service":
         if not args.serial:
-            parser.error("--service requires --serial")
+            parser.error("service requires --serial")
         from .service import run_service
 
         run_service(args.serial, args.tac_config_path, args.hostname, args.port)
-    elif args.oneshot:
+    elif args.mode == "oneshot":
         if not args.serial and not args.config_file_path:
-            parser.error("--oneshot requires --serial or --config-file-path")
+            parser.error("oneshot requires --serial or --config-file-path")
         from .shell import run_oneshot
 
-        command = args.oneshot[0]
-        value = args.oneshot[1] if len(args.oneshot) > 1 else None
         serial = args.serial[0] if args.serial else None
-        run_oneshot(command, serial, args.config_file_path, args.tac_config_path, value)
-    else:  # --shell
+        run_oneshot(
+            args.command,
+            serial,
+            args.config_file_path,
+            args.tac_config_path,
+            args.value,
+        )
+    else:  # shell
         if not args.serial and not args.config_file_path:
-            parser.error("--shell requires --serial or --config-file-path")
+            parser.error("shell requires --serial or --config-file-path")
         from .shell import run_shell
 
         serial = args.serial[0] if args.serial else None

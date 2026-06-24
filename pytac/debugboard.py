@@ -54,6 +54,61 @@ class Board(dict):
         return DummyBoard(config_file_path)
 
     @classmethod
+    def known_boards(cls):
+        # (idVendor, idProduct) -> human-readable board type. A pair may map
+        # to more than one model (e.g. a pic32cx also enumerates as FTDI
+        # 0403:6011); the label is the USB-level category, not the exact
+        # model, which can only be resolved by querying the board.
+        return {
+            (cls.ID_VENDOR_FTDI, cls.ID_PRODUCT_BUGHOPPER_V1): "Bughopper V1",
+            (cls.ID_VENDOR_FTDI, cls.ID_PRODUCT_FTDI): "FTDI",
+            (cls.ID_VENDOR_QCOM, cls.ID_PRODUCT_QCOM): "PSOC",
+            (cls.ID_VENDOR_BUGHOPPER_V2, cls.ID_PRODUCT_BUGHOPPER_V2): "Bughopper V2",
+        }
+
+    @classmethod
+    def list_boards(cls):
+        """Enumerate connected debug boards via their serial (tty) devices.
+
+        Boards are discovered by walking the ``tty`` subsystem (the same
+        place a board's serial port is found when driving it) and reading
+        the udev ``ID_SERIAL_SHORT`` / ``ID_VENDOR_ID`` / ``ID_MODEL_ID``
+        properties. Using the tty device rather than the parent USB device
+        ensures the serial is available for all boards, including pic32cx.
+
+        Returns a list of dicts with the board ``type``, USB ``serial``
+        number and ``vid``/``pid``, de-duplicated by serial (a board may
+        expose more than one tty interface).
+        """
+        known = cls.known_boards()
+        context = pyudev.Context()
+        boards = []
+        seen = set()
+        for device in context.list_devices(subsystem="tty"):
+            props = device.properties
+            serial = props.get("ID_SERIAL_SHORT")
+            if not serial or serial in seen:
+                continue
+            try:
+                vid = int(props.get("ID_VENDOR_ID", ""), 16)
+                pid = int(props.get("ID_MODEL_ID", ""), 16)
+            except ValueError:
+                continue
+            board_type = known.get((vid, pid))
+            if board_type is None:
+                continue
+            seen.add(serial)
+            boards.append(
+                {
+                    "type": board_type,
+                    "serial": serial,
+                    "vid": vid,
+                    "pid": pid,
+                }
+            )
+        return boards
+
+    @classmethod
     def create_board(cls, serial, tac_config_path):
         device = usb.core.find(serial_number=serial)
         if device:

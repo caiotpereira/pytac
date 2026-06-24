@@ -62,7 +62,19 @@ the `--tac-config-path` directory for FTDI/PSOC boards. Example entry for a PSOC
 
 ## Finding your board's serial number
 
-The `--serial` argument takes the USB serial number, not a device path. Find it with:
+The `--serial` argument takes the USB serial number, not a device path. The easiest way to
+discover connected boards and their serial numbers is the `list` subcommand:
+
+    pytac list
+
+It prints every recognised debug board with its type, USB vendor/product ID, and serial number
+(read from udev, the same `ID_SERIAL_SHORT` value you pass to `--serial`):
+
+    Connected debug boards:
+      Bughopper V1   vid:pid=0403:6015  serial=DP05DIAN
+      PSOC           vid:pid=05c6:9302  serial=0123456789
+
+Alternatively, find it manually with `udevadm`:
 
     udevadm info /dev/ttyACM0 | grep ID_SERIAL_SHORT
 
@@ -72,9 +84,9 @@ Or using `lsusb` (replace `VID:PID` with `0403:6011` for FTDI or `05c6:9302` for
 
 # Using as a shell
 
-The shell is the default mode, so `--shell` is optional:
+Start the interactive shell with the `shell` subcommand:
 
-    pytac --serial <ID_SERIAL_SHORT>
+    pytac shell --serial <ID_SERIAL_SHORT>
 
 Optional arguments:
 
@@ -110,23 +122,23 @@ Type `help` in the shell to list all commands available for your specific board.
 
 # Running a single command
 
-Use `--oneshot` to run one command and exit, without entering the interactive shell. This is
-handy for scripting:
+Use the `oneshot` subcommand to run one command and exit, without entering the interactive
+shell. This is handy for scripting:
 
-    pytac --serial <ID_SERIAL_SHORT> --oneshot bootToEDL
-    pytac --serial <ID_SERIAL_SHORT> --oneshot reset
+    pytac oneshot bootToEDL --serial <ID_SERIAL_SHORT>
+    pytac oneshot reset --serial <ID_SERIAL_SHORT>
 
 GPIO pin commands take an integer value (`1` to assert, `0` to deassert):
 
-    pytac --serial <ID_SERIAL_SHORT> --oneshot pkey 1
-    pytac --serial <ID_SERIAL_SHORT> --oneshot pkey 0
+    pytac oneshot pkey 1 --serial <ID_SERIAL_SHORT>
+    pytac oneshot pkey 0 --serial <ID_SERIAL_SHORT>
 
 The same commands available in the shell can be used here. An unknown command exits with an
 error listing the commands supported by your board.
 
 # Using as a service
 
-    pytac --service --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
+    pytac service --serial <ID_SERIAL_SHORT_1> [<ID_SERIAL_SHORT_2> ...]
 
 The REST API runs on `http://localhost:5000`. Example usage with curl:
 
